@@ -1,6 +1,8 @@
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
+const startButton = document.getElementById('start-button');
+const startScreen = document.getElementById('start-screen');
 
 // Game constants
 const WIDTH = 800;
@@ -14,6 +16,7 @@ const MAX_LANDING_ANGLE = 0.1; // Radians, close to zero
 const INITIAL_FUEL = 1000;
 const THRUST_FUEL_CONSUMPTION = 1;
 
+let gameState = 'start'; // 'start', 'playing', 'landed'
 
 // Canvas setup
 canvas.width = WIDTH;
@@ -37,54 +40,67 @@ const player = {
 const landscape = [];
 const LANDSCAPE_SEGMENTS = 50;
 const segmentWidth = WIDTH / LANDSCAPE_SEGMENTS;
-const landingPadPosition = Math.floor(Math.random() * (LANDSCAPE_SEGMENTS - 5)) + 2;
+let landingPadPosition;
 
-for (let i = 0; i <= LANDSCAPE_SEGMENTS; i++) {
-    const isLandingPad = i >= landingPadPosition && i <= landingPadPosition + 3;
-    const y = isLandingPad ? HEIGHT - 100 : HEIGHT - 100 + Math.random() * 50;
-    if (isLandingPad && i > landingPadPosition) {
-        landscape[i] = { x: i * segmentWidth, y: landscape[i-1].y, isLandingPad: true };
-    } else {
-        landscape.push({ x: i * segmentWidth, y: y, isLandingPad: isLandingPad });
+function generateLandscape() {
+    landscape.length = 0;
+    landingPadPosition = Math.floor(Math.random() * (LANDSCAPE_SEGMENTS - 5)) + 2;
+    for (let i = 0; i <= LANDSCAPE_SEGMENTS; i++) {
+        const isLandingPad = i >= landingPadPosition && i <= landingPadPosition + 3;
+        const y = isLandingPad ? HEIGHT - 100 : HEIGHT - 100 + Math.random() * 50;
+        if (isLandingPad && i > landingPadPosition) {
+            landscape[i] = { x: i * segmentWidth, y: landscape[i-1].y, isLandingPad: true };
+        } else {
+            landscape.push({ x: i * segmentWidth, y: y, isLandingPad: isLandingPad });
+        }
     }
 }
 
 
 // --- Input Handling ---
+startButton.addEventListener('click', () => {
+    startGame();
+});
+
 document.addEventListener('keydown', (e) => {
-    if (player.landed && e.key === 'ArrowUp') {
-        player.landed = false; // Take off
-    }
-    switch (e.key) {
-        case 'ArrowUp':
-            player.thrust = true;
-            break;
-        case 'ArrowLeft':
-            player.rotatingLeft = true;
-            break;
-        case 'ArrowRight':
-            player.rotatingRight = true;
-            break;
+    if (gameState === 'playing') {
+        if (player.landed && e.key === 'ArrowUp') {
+            player.landed = false; // Take off
+            gameState = 'playing';
+        }
+        switch (e.key) {
+            case 'ArrowUp':
+                player.thrust = true;
+                break;
+            case 'ArrowLeft':
+                player.rotatingLeft = true;
+                break;
+            case 'ArrowRight':
+                player.rotatingRight = true;
+                break;
+        }
     }
 });
 
 document.addEventListener('keyup', (e) => {
-    switch (e.key) {
-        case 'ArrowUp':
-            player.thrust = false;
-            break;
-        case 'ArrowLeft':
-            player.rotatingLeft = false;
-            break;
-        case 'ArrowRight':
-            player.rotatingRight = false;
-            break;
+    if (gameState === 'playing') {
+        switch (e.key) {
+            case 'ArrowUp':
+                player.thrust = false;
+                break;
+            case 'ArrowLeft':
+                player.rotatingLeft = false;
+                break;
+            case 'ArrowRight':
+                player.rotatingRight = false;
+                break;
+        }
     }
 });
 
 // --- Game Loop ---
 function update() {
-    if (!player.landed) {
+    if (gameState === 'playing' && !player.landed) {
         // --- Physics ---
         // Rotation
         if (player.rotatingLeft) {
@@ -137,6 +153,7 @@ function checkCollisions() {
 
             if (isLandingZone && verticalSpeed < MAX_LANDING_SPEED_Y && horizontalSpeed < MAX_LANDING_SPEED_X && isUpright) {
                 player.landed = true;
+                gameState = 'landed';
                 player.velocity = { x: 0, y: 0 };
                 player.angle = -Math.PI / 2;
                 player.fuel = INITIAL_FUEL;
@@ -158,6 +175,10 @@ function draw() {
      // Clear canvas
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    if (gameState === 'start') {
+        return;
+    }
 
     // Draw landscape
     ctx.strokeStyle = '#fff';
@@ -206,7 +227,7 @@ function draw() {
     ctx.fillText(`Fuel: ${Math.ceil(player.fuel)}`, 20, 30);
 
 
-    if(player.landed){
+    if(gameState === 'landed'){
         ctx.fillStyle = 'lime';
         ctx.font = '30px Courier New';
         ctx.textAlign = 'center';
@@ -221,9 +242,15 @@ function resetPlayer() {
     player.angle = 0;
     player.landed = false;
     player.fuel = INITIAL_FUEL;
+    gameState = 'playing';
 }
 
+function startGame() {
+    startScreen.style.display = 'none';
+    generateLandscape();
+    resetPlayer();
+    update();
+}
 
-// Start the game
-resetPlayer();
+// Initial draw
 update();
