@@ -62,6 +62,9 @@ startButton.addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
+    if (gameState === 'landed' && e.key === 'Enter') {
+        startGame();
+    }
     if (gameState === 'landed' && e.key === 'ArrowUp') {
         player.landed = false;
         gameState = 'playing';
@@ -227,6 +230,8 @@ function draw() {
         ctx.font = '30px Courier New';
         ctx.textAlign = 'center';
         ctx.fillText('Landed!', WIDTH / 2, HEIGHT / 2);
+        ctx.font = '20px Courier New';
+        ctx.fillText('Press Enter to restart', WIDTH / 2, HEIGHT / 2 + 40);
     }
 }
 
@@ -244,7 +249,6 @@ function startGame() {
     startScreen.style.display = 'none';
     generateLandscape();
     resetPlayer();
-    update();
 }
 
 // Initial draw
