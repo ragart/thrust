@@ -11,6 +11,8 @@ const ROTATION_SPEED = 0.05;
 const MAX_LANDING_SPEED_Y = 2;
 const MAX_LANDING_SPEED_X = 2;
 const MAX_LANDING_ANGLE = 0.1; // Radians, close to zero
+const INITIAL_FUEL = 1000;
+const THRUST_FUEL_CONSUMPTION = 1;
 
 
 // Canvas setup
@@ -27,7 +29,8 @@ const player = {
     thrust: false,
     rotatingLeft: false,
     rotatingRight: false,
-    landed: false
+    landed: false,
+    fuel: INITIAL_FUEL
 };
 
 // Landscape
@@ -92,9 +95,10 @@ function update() {
         }
 
         // Thrust
-        if (player.thrust) {
+        if (player.thrust && player.fuel > 0) {
             player.velocity.x += Math.cos(player.angle) * THRUST_POWER;
             player.velocity.y += Math.sin(player.angle) * THRUST_POWER;
+            player.fuel -= THRUST_FUEL_CONSUMPTION;
         }
 
         // Gravity
@@ -135,6 +139,7 @@ function checkCollisions() {
                 player.landed = true;
                 player.velocity = { x: 0, y: 0 };
                 player.angle = -Math.PI / 2;
+                player.fuel = INITIAL_FUEL;
             } else {
                 resetPlayer();
             }
@@ -182,7 +187,7 @@ function draw() {
     ctx.restore();
 
     // Draw thrust flame
-    if (player.thrust && !player.landed) {
+    if (player.thrust && !player.landed && player.fuel > 0) {
         ctx.save();
         ctx.translate(player.x, player.y);
         ctx.rotate(player.angle);
@@ -193,6 +198,13 @@ function draw() {
         ctx.stroke();
         ctx.restore();
     }
+
+    // Draw Fuel
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Courier New';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Fuel: ${Math.ceil(player.fuel)}`, 20, 30);
+
 
     if(player.landed){
         ctx.fillStyle = 'lime';
@@ -208,6 +220,7 @@ function resetPlayer() {
     player.velocity = { x: 0, y: 0 };
     player.angle = 0;
     player.landed = false;
+    player.fuel = INITIAL_FUEL;
 }
 
 
