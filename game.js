@@ -56,18 +56,17 @@ function generateLandscape() {
     }
 }
 
-
 // --- Input Handling ---
 startButton.addEventListener('click', () => {
     startGame();
 });
 
 document.addEventListener('keydown', (e) => {
+    if (gameState === 'landed' && e.key === 'ArrowUp') {
+        player.landed = false;
+        gameState = 'playing';
+    }
     if (gameState === 'playing') {
-        if (player.landed && e.key === 'ArrowUp') {
-            player.landed = false; // Take off
-            gameState = 'playing';
-        }
         switch (e.key) {
             case 'ArrowUp':
                 player.thrust = true;
@@ -128,7 +127,6 @@ function update() {
         checkCollisions();
     }
 
-
     // --- Drawing ---
     draw();
 
@@ -149,7 +147,6 @@ function checkCollisions() {
             // Normalize angle to be between -PI and PI
             const normalizedAngle = (player.angle + Math.PI) % (2 * Math.PI) - Math.PI;
             const isUpright = Math.abs(normalizedAngle - (-Math.PI / 2)) < MAX_LANDING_ANGLE;
-
 
             if (isLandingZone && verticalSpeed < MAX_LANDING_SPEED_Y && horizontalSpeed < MAX_LANDING_SPEED_X && isUpright) {
                 player.landed = true;
@@ -193,7 +190,6 @@ function draw() {
     }
     ctx.stroke();
 
-
     // Draw player
     ctx.save();
     ctx.translate(player.x, player.y);
@@ -225,7 +221,6 @@ function draw() {
     ctx.font = '20px Courier New';
     ctx.textAlign = 'left';
     ctx.fillText(`Fuel: ${Math.ceil(player.fuel)}`, 20, 30);
-
 
     if(gameState === 'landed'){
         ctx.fillStyle = 'lime';
