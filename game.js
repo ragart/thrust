@@ -8,6 +8,10 @@ const HEIGHT = 600;
 const GRAVITY = 0.05;
 const THRUST_POWER = 0.1;
 const ROTATION_SPEED = 0.05;
+const MAX_LANDING_SPEED_Y = 2;
+const MAX_LANDING_SPEED_X = 2;
+const MAX_LANDING_ANGLE = 0.1; // Radians, close to zero
+
 
 // Canvas setup
 canvas.width = WIDTH;
@@ -22,20 +26,32 @@ const player = {
     velocity: { x: 0, y: 0 },
     thrust: false,
     rotatingLeft: false,
-    rotatingRight: false
+    rotatingRight: false,
+    landed: false
 };
 
 // Landscape
 const landscape = [];
 const LANDSCAPE_SEGMENTS = 50;
 const segmentWidth = WIDTH / LANDSCAPE_SEGMENTS;
+const landingPadPosition = Math.floor(Math.random() * (LANDSCAPE_SEGMENTS - 5)) + 2;
+
 for (let i = 0; i <= LANDSCAPE_SEGMENTS; i++) {
-    landscape.push({ x: i * segmentWidth, y: HEIGHT - 100 + Math.random() * 50 });
+    const isLandingPad = i >= landingPadPosition && i <= landingPadPosition + 3;
+    const y = isLandingPad ? HEIGHT - 100 : HEIGHT - 100 + Math.random() * 50;
+    if (isLandingPad && i > landingPadPosition) {
+        landscape[i] = { x: i * segmentWidth, y: landscape[i-1].y, isLandingPad: true };
+    } else {
+        landscape.push({ x: i * segmentWidth, y: y, isLandingPad: isLandingPad });
+    }
 }
 
 
 // --- Input Handling ---
 document.addEventListener('keydown', (e) => {
+    if (player.landed && e.key === 'ArrowUp') {
+        player.landed = false; // Take off
+    }
     switch (e.key) {
         case 'ArrowUp':
             player.thrust = true;
@@ -65,37 +81,63 @@ document.addEventListener('keyup', (e) => {
 
 // --- Game Loop ---
 function update() {
-    // --- Physics ---
-    // Rotation
-    if (player.rotatingLeft) {
-        player.angle -= ROTATION_SPEED;
+    if (!player.landed) {
+        // --- Physics ---
+        // Rotation
+        if (player.rotatingLeft) {
+            player.angle -= ROTATION_SPEED;
+        }
+        if (player.rotatingRight) {
+            player.angle += ROTATION_SPEED;
+        }
+
+        // Thrust
+        if (player.thrust) {
+            player.velocity.x += Math.cos(player.angle) * THRUST_POWER;
+            player.velocity.y += Math.sin(player.angle) * THRUST_POWER;
+        }
+
+        // Gravity
+        player.velocity.y += GRAVITY;
+
+        // Update position
+        player.x += player.velocity.x;
+        player.y += player.velocity.y;
+
+        // --- Collision Detection ---
+        checkCollisions();
     }
-    if (player.rotatingRight) {
-        player.angle += ROTATION_SPEED;
-    }
 
-    // Thrust
-    if (player.thrust) {
-        player.velocity.x += Math.cos(player.angle) * THRUST_POWER;
-        player.velocity.y += Math.sin(player.angle) * THRUST_POWER;
-    }
 
-    // Gravity
-    player.velocity.y += GRAVITY;
+    // --- Drawing ---
+    draw();
 
-    // Update position
-    player.x += player.velocity.x;
-    player.y += player.velocity.y;
+    requestAnimationFrame(update);
+}
 
-    // --- Collision Detection ---
+function checkCollisions() {
     // Landscape
     for (let i = 0; i < landscape.length - 1; i++) {
         const p1 = landscape[i];
         const p2 = landscape[i+1];
 
-        // Simple collision with floor
         if (player.x > p1.x && player.x < p2.x && player.y + player.radius > p1.y) {
-             resetPlayer();
+            const isLandingZone = p1.isLandingPad && p2.isLandingPad;
+            const verticalSpeed = Math.abs(player.velocity.y);
+            const horizontalSpeed = Math.abs(player.velocity.x);
+            
+            // Normalize angle to be between -PI and PI
+            const normalizedAngle = (player.angle + Math.PI) % (2 * Math.PI) - Math.PI;
+            const isUpright = Math.abs(normalizedAngle - (-Math.PI / 2)) < MAX_LANDING_ANGLE;
+
+
+            if (isLandingZone && verticalSpeed < MAX_LANDING_SPEED_Y && horizontalSpeed < MAX_LANDING_SPEED_X && isUpright) {
+                player.landed = true;
+                player.velocity = { x: 0, y: 0 };
+                player.angle = -Math.PI / 2;
+            } else {
+                resetPlayer();
+            }
         }
     }
     // Walls
@@ -105,10 +147,10 @@ function update() {
     if (player.y - player.radius < 0) {
         resetPlayer();
     }
+}
 
-
-    // --- Drawing ---
-    // Clear canvas
+function draw() {
+     // Clear canvas
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -117,7 +159,11 @@ function update() {
     ctx.beginPath();
     ctx.moveTo(landscape[0].x, landscape[0].y);
     for (let i = 1; i < landscape.length; i++) {
+        ctx.strokeStyle = landscape[i].isLandingPad ? 'lime' : '#fff';
         ctx.lineTo(landscape[i].x, landscape[i].y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(landscape[i].x, landscape[i].y);
     }
     ctx.stroke();
 
@@ -136,7 +182,7 @@ function update() {
     ctx.restore();
 
     // Draw thrust flame
-    if (player.thrust) {
+    if (player.thrust && !player.landed) {
         ctx.save();
         ctx.translate(player.x, player.y);
         ctx.rotate(player.angle);
@@ -148,8 +194,12 @@ function update() {
         ctx.restore();
     }
 
-
-    requestAnimationFrame(update);
+    if(player.landed){
+        ctx.fillStyle = 'lime';
+        ctx.font = '30px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('Landed!', WIDTH / 2, HEIGHT / 2);
+    }
 }
 
 function resetPlayer() {
@@ -157,6 +207,7 @@ function resetPlayer() {
     player.y = 100;
     player.velocity = { x: 0, y: 0 };
     player.angle = 0;
+    player.landed = false;
 }
 
 
