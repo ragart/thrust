@@ -16,8 +16,10 @@ const MAX_LANDING_ANGLE = 0.1; // Radians, close to zero
 const INITIAL_FUEL = 1000;
 const THRUST_FUEL_CONSUMPTION = 1;
 const MAX_SUBSTEP_DISTANCE = 4;
+const BASE_FRAME_MS = 1000 / 60;
 
 let gameState = 'start'; // 'start', 'playing', 'landed'
+let lastTimestamp = null;
 
 // Canvas setup
 canvas.width = WIDTH;
@@ -102,34 +104,45 @@ document.addEventListener('keyup', (e) => {
 });
 
 // --- Game Loop ---
-function update() {
+function update(timestamp) {
+    if (lastTimestamp === null) {
+        lastTimestamp = timestamp;
+    }
+
+    const deltaMs = Math.min(50, Math.max(0, timestamp - lastTimestamp));
+    const dtScale = deltaMs / BASE_FRAME_MS;
+    lastTimestamp = timestamp;
+
     if (gameState === 'playing' && !player.landed) {
         // --- Physics ---
         // Rotation
         if (player.rotatingLeft) {
-            player.angle -= ROTATION_SPEED;
+            player.angle -= ROTATION_SPEED * dtScale;
         }
         if (player.rotatingRight) {
-            player.angle += ROTATION_SPEED;
+            player.angle += ROTATION_SPEED * dtScale;
         }
 
         // Thrust
         if (player.thrust && player.fuel > 0) {
-            player.velocity.x += Math.cos(player.angle) * THRUST_POWER;
-            player.velocity.y += Math.sin(player.angle) * THRUST_POWER;
-            player.fuel -= THRUST_FUEL_CONSUMPTION;
+            player.velocity.x += Math.cos(player.angle) * THRUST_POWER * dtScale;
+            player.velocity.y += Math.sin(player.angle) * THRUST_POWER * dtScale;
+            player.fuel = Math.max(0, player.fuel - THRUST_FUEL_CONSUMPTION * dtScale);
         }
 
         // Gravity
-        player.velocity.y += GRAVITY;
+        player.velocity.y += GRAVITY * dtScale;
+
+        const frameVelocityX = player.velocity.x * dtScale;
+        const frameVelocityY = player.velocity.y * dtScale;
 
         // Update position with substeps to avoid tunneling at high speed
-        const movementMagnitude = Math.max(Math.abs(player.velocity.x), Math.abs(player.velocity.y));
+        const movementMagnitude = Math.max(Math.abs(frameVelocityX), Math.abs(frameVelocityY));
         const substeps = Math.max(1, Math.ceil(movementMagnitude / MAX_SUBSTEP_DISTANCE));
 
         for (let step = 0; step < substeps; step++) {
-            player.x += player.velocity.x / substeps;
-            player.y += player.velocity.y / substeps;
+            player.x += frameVelocityX / substeps;
+            player.y += frameVelocityY / substeps;
 
             // --- Collision Detection ---
             if (checkCollisions()) {
@@ -282,4 +295,4 @@ function startGame() {
 }
 
 // Initial draw
-update();
+requestAnimationFrame(update);
