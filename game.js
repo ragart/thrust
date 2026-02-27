@@ -1,7 +1,7 @@
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
-const startButton = document.getElementById('start-button');
+const startPrompt = document.getElementById('start-prompt');
 const startScreen = document.getElementById('start-screen');
 
 // Game constants
@@ -23,7 +23,7 @@ const TOUCHDOWN_EFFECT_MS = 350;
 const CRASH_EFFECT_MS = 500;
 const CRASH_RESPAWN_DELAY_MS = 700;
 
-let gameState = 'start'; // 'start', 'playing', 'landed', 'crashed'
+let gameState = 'start'; // 'start', 'playing', 'paused', 'landed', 'crashed'
 let lastTimestamp = null;
 let respawnGraceRemainingMs = 0;
 let showLaunchCountdown = false;
@@ -70,18 +70,42 @@ function generateLandscape() {
 }
 
 // --- Input Handling ---
-startButton.addEventListener('click', () => {
-    startGame();
-});
+startPrompt.textContent = 'Press Enter to Start';
 
 document.addEventListener('keydown', (e) => {
+    if (['ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape'].includes(e.key)) {
+        e.preventDefault();
+    }
+
+    if (gameState === 'start' && e.key === 'Enter') {
+        startGame();
+        return;
+    }
+
+    if (gameState === 'paused') {
+        if (e.key === 'Escape') {
+            resumeGame();
+        } else if (e.key === 'Enter') {
+            returnToMainMenu();
+        }
+        return;
+    }
+
+    if (gameState === 'playing' && e.key === 'Escape') {
+        pauseGame();
+        return;
+    }
+
     if (gameState === 'landed' && e.key === 'Enter') {
         startGame();
+        return;
     }
-    if (gameState === 'landed' && e.key === 'ArrowUp') {
-        player.landed = false;
-        gameState = 'playing';
+
+    if (gameState === 'landed' && e.key === 'Escape') {
+        returnToMainMenu();
+        return;
     }
+
     if (gameState === 'playing' && respawnGraceRemainingMs <= 0) {
         switch (e.key) {
             case 'ArrowUp':
@@ -387,7 +411,20 @@ function draw() {
         ctx.textAlign = 'center';
         ctx.fillText('Landed!', WIDTH / 2, HEIGHT / 2);
         ctx.font = '20px Courier New';
-        ctx.fillText('Press Enter to restart', WIDTH / 2, HEIGHT / 2 + 40);
+        ctx.fillText('Enter: Restart', WIDTH / 2, HEIGHT / 2 + 40);
+        ctx.fillText('Esc: Main Menu', WIDTH / 2, HEIGHT / 2 + 70);
+    }
+
+    if (gameState === 'paused') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+        ctx.fillStyle = 'white';
+        ctx.font = '36px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('Paused', WIDTH / 2, HEIGHT / 2 - 40);
+        ctx.font = '20px Courier New';
+        ctx.fillText('Esc: Resume', WIDTH / 2, HEIGHT / 2 + 10);
+        ctx.fillText('Enter: Main Menu', WIDTH / 2, HEIGHT / 2 + 40);
     }
 }
 
@@ -406,6 +443,38 @@ function triggerCrash() {
     crashRespawnRemainingMs = CRASH_RESPAWN_DELAY_MS;
     respawnGraceRemainingMs = 0;
     showLaunchCountdown = false;
+}
+
+function pauseGame() {
+    if (gameState !== 'playing') {
+        return;
+    }
+
+    clearControlInputs();
+    gameState = 'paused';
+}
+
+function resumeGame() {
+    if (gameState !== 'paused') {
+        return;
+    }
+
+    clearControlInputs();
+    lastTimestamp = null;
+    gameState = 'playing';
+}
+
+function returnToMainMenu() {
+    clearControlInputs();
+    respawnGraceRemainingMs = 0;
+    showLaunchCountdown = false;
+    touchdownEffectRemainingMs = 0;
+    crashEffectRemainingMs = 0;
+    crashRespawnRemainingMs = 0;
+    player.velocity = { x: 0, y: 0 };
+    player.landed = false;
+    gameState = 'start';
+    startScreen.style.display = 'flex';
 }
 
 function resetPlayer(applyRespawnGrace = true, graceMs = RESPAWN_GRACE_MS, withCountdown = false) {
@@ -427,6 +496,7 @@ function resetPlayer(applyRespawnGrace = true, graceMs = RESPAWN_GRACE_MS, withC
 function startGame() {
     startScreen.style.display = 'none';
     generateLandscape();
+    lastTimestamp = null;
     resetPlayer(true, START_GRACE_MS, true);
 }
 
