@@ -15,6 +15,7 @@ const MAX_LANDING_SPEED_X = 2;
 const MAX_LANDING_ANGLE = 0.1; // Radians, close to zero
 const INITIAL_FUEL = 1000;
 const THRUST_FUEL_CONSUMPTION = 1;
+const MAX_SUBSTEP_DISTANCE = 4;
 
 let gameState = 'start'; // 'start', 'playing', 'landed'
 
@@ -122,12 +123,19 @@ function update() {
         // Gravity
         player.velocity.y += GRAVITY;
 
-        // Update position
-        player.x += player.velocity.x;
-        player.y += player.velocity.y;
+        // Update position with substeps to avoid tunneling at high speed
+        const movementMagnitude = Math.max(Math.abs(player.velocity.x), Math.abs(player.velocity.y));
+        const substeps = Math.max(1, Math.ceil(movementMagnitude / MAX_SUBSTEP_DISTANCE));
 
-        // --- Collision Detection ---
-        checkCollisions();
+        for (let step = 0; step < substeps; step++) {
+            player.x += player.velocity.x / substeps;
+            player.y += player.velocity.y / substeps;
+
+            // --- Collision Detection ---
+            if (checkCollisions()) {
+                break;
+            }
+        }
     }
 
     // --- Drawing ---
@@ -141,8 +149,22 @@ function checkCollisions() {
     for (let i = 0; i < landscape.length - 1; i++) {
         const p1 = landscape[i];
         const p2 = landscape[i+1];
+        const minX = Math.min(p1.x, p2.x);
+        const maxX = Math.max(p1.x, p2.x);
 
-        if (player.x > p1.x && player.x < p2.x && player.y + player.radius > p1.y) {
+        if (player.x >= minX && player.x <= maxX) {
+            const segmentLength = p2.x - p1.x;
+            if (segmentLength === 0) {
+                continue;
+            }
+
+            const t = Math.max(0, Math.min(1, (player.x - p1.x) / segmentLength));
+            const terrainY = p1.y + (p2.y - p1.y) * t;
+
+            if (player.y + player.radius < terrainY) {
+                continue;
+            }
+
             const isLandingZone = p1.isLandingPad && p2.isLandingPad;
             const verticalSpeed = Math.abs(player.velocity.y);
             const horizontalSpeed = Math.abs(player.velocity.x);
@@ -152,23 +174,31 @@ function checkCollisions() {
             const isUpright = Math.abs(normalizedAngle - (-Math.PI / 2)) < MAX_LANDING_ANGLE;
 
             if (isLandingZone && verticalSpeed < MAX_LANDING_SPEED_Y && horizontalSpeed < MAX_LANDING_SPEED_X && isUpright) {
+                player.y = terrainY - player.radius;
                 player.landed = true;
                 gameState = 'landed';
                 player.velocity = { x: 0, y: 0 };
                 player.angle = -Math.PI / 2;
                 player.fuel = INITIAL_FUEL;
+                return true;
             } else {
+                player.y = terrainY - player.radius;
                 resetPlayer();
+                return true;
             }
         }
     }
     // Walls
      if (player.x - player.radius < 0 || player.x + player.radius > WIDTH) {
         resetPlayer();
+        return true;
     }
     if (player.y - player.radius < 0) {
         resetPlayer();
+        return true;
     }
+
+    return false;
 }
 
 function draw() {
