@@ -170,7 +170,7 @@ function checkCollisions() {
             const horizontalSpeed = Math.abs(player.velocity.x);
             
             // Normalize angle to be between -PI and PI
-            const normalizedAngle = (player.angle + Math.PI) % (2 * Math.PI) - Math.PI;
+            const normalizedAngle = Math.atan2(Math.sin(player.angle), Math.cos(player.angle));
             const isUpright = Math.abs(normalizedAngle - (-Math.PI / 2)) < MAX_LANDING_ANGLE;
 
             if (isLandingZone && verticalSpeed < MAX_LANDING_SPEED_Y && horizontalSpeed < MAX_LANDING_SPEED_X && isUpright) {
