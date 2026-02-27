@@ -19,11 +19,17 @@ const MAX_SUBSTEP_DISTANCE = 4;
 const BASE_FRAME_MS = 1000 / 60;
 const RESPAWN_GRACE_MS = 600;
 const START_GRACE_MS = 4000;
+const TOUCHDOWN_EFFECT_MS = 350;
+const CRASH_EFFECT_MS = 500;
+const CRASH_RESPAWN_DELAY_MS = 700;
 
-let gameState = 'start'; // 'start', 'playing', 'landed'
+let gameState = 'start'; // 'start', 'playing', 'landed', 'crashed'
 let lastTimestamp = null;
 let respawnGraceRemainingMs = 0;
 let showLaunchCountdown = false;
+let touchdownEffectRemainingMs = 0;
+let crashEffectRemainingMs = 0;
+let crashRespawnRemainingMs = 0;
 
 // Canvas setup
 canvas.width = WIDTH;
@@ -117,6 +123,21 @@ function update(timestamp) {
     const dtScale = deltaMs / BASE_FRAME_MS;
     lastTimestamp = timestamp;
 
+    if (touchdownEffectRemainingMs > 0) {
+        touchdownEffectRemainingMs = Math.max(0, touchdownEffectRemainingMs - deltaMs);
+    }
+
+    if (crashEffectRemainingMs > 0) {
+        crashEffectRemainingMs = Math.max(0, crashEffectRemainingMs - deltaMs);
+    }
+
+    if (gameState === 'crashed') {
+        crashRespawnRemainingMs = Math.max(0, crashRespawnRemainingMs - deltaMs);
+        if (crashRespawnRemainingMs <= 0) {
+            resetPlayer();
+        }
+    }
+
     if (gameState === 'playing' && !player.landed) {
         if (respawnGraceRemainingMs > 0) {
             respawnGraceRemainingMs = Math.max(0, respawnGraceRemainingMs - deltaMs);
@@ -207,22 +228,26 @@ function checkCollisions() {
                 gameState = 'landed';
                 player.velocity = { x: 0, y: 0 };
                 player.angle = -Math.PI / 2;
+                clearControlInputs();
                 player.fuel = INITIAL_FUEL;
+                touchdownEffectRemainingMs = TOUCHDOWN_EFFECT_MS;
                 return true;
             } else {
                 player.y = terrainY - player.radius;
-                resetPlayer();
+                triggerCrash();
                 return true;
             }
         }
     }
     // Walls
      if (player.x - player.radius < 0 || player.x + player.radius > WIDTH) {
-        resetPlayer();
+        player.x = Math.max(player.radius, Math.min(WIDTH - player.radius, player.x));
+        triggerCrash();
         return true;
     }
     if (player.y - player.radius < 0) {
-        resetPlayer();
+        player.y = player.radius;
+        triggerCrash();
         return true;
     }
 
@@ -266,6 +291,38 @@ function draw() {
         }
     }
     ctx.stroke();
+
+    // Draw touchdown effect
+    if (gameState === 'landed' && touchdownEffectRemainingMs > 0) {
+        const effectAlpha = touchdownEffectRemainingMs / TOUCHDOWN_EFFECT_MS;
+        const effectRadius = player.radius + 8 + (1 - effectAlpha) * 10;
+        ctx.strokeStyle = `rgba(0, 255, 0, ${effectAlpha.toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, effectRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+    }
+
+    // Draw crash effect
+    if (gameState === 'crashed' && crashEffectRemainingMs > 0) {
+        const effectAlpha = crashEffectRemainingMs / CRASH_EFFECT_MS;
+        const outerRadius = player.radius + 12 + (1 - effectAlpha) * 26;
+        const innerRadius = player.radius + 4 + (1 - effectAlpha) * 14;
+
+        ctx.strokeStyle = `rgba(255, 120, 0, ${effectAlpha.toFixed(3)})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, outerRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(255, 0, 0, ${(effectAlpha * 0.9).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, innerRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+    }
 
     // Draw player
     ctx.save();
@@ -317,6 +374,13 @@ function draw() {
         ctx.fillText(countdownText, WIDTH / 2, HEIGHT / 2);
     }
 
+    if (gameState === 'crashed') {
+        ctx.fillStyle = '#ff5555';
+        ctx.font = '28px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('Crashed!', WIDTH / 2, HEIGHT / 2 - 30);
+    }
+
     if(gameState === 'landed'){
         ctx.fillStyle = 'lime';
         ctx.font = '30px Courier New';
@@ -333,6 +397,17 @@ function clearControlInputs() {
     player.rotatingRight = false;
 }
 
+function triggerCrash() {
+    clearControlInputs();
+    player.velocity = { x: 0, y: 0 };
+    player.landed = false;
+    gameState = 'crashed';
+    crashEffectRemainingMs = CRASH_EFFECT_MS;
+    crashRespawnRemainingMs = CRASH_RESPAWN_DELAY_MS;
+    respawnGraceRemainingMs = 0;
+    showLaunchCountdown = false;
+}
+
 function resetPlayer(applyRespawnGrace = true, graceMs = RESPAWN_GRACE_MS, withCountdown = false) {
     player.x = WIDTH / 2;
     player.y = 100;
@@ -343,6 +418,9 @@ function resetPlayer(applyRespawnGrace = true, graceMs = RESPAWN_GRACE_MS, withC
     clearControlInputs();
     respawnGraceRemainingMs = applyRespawnGrace ? graceMs : 0;
     showLaunchCountdown = applyRespawnGrace && withCountdown;
+    touchdownEffectRemainingMs = 0;
+    crashEffectRemainingMs = 0;
+    crashRespawnRemainingMs = 0;
     gameState = 'playing';
 }
 
