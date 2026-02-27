@@ -17,9 +17,13 @@ const INITIAL_FUEL = 1000;
 const THRUST_FUEL_CONSUMPTION = 1;
 const MAX_SUBSTEP_DISTANCE = 4;
 const BASE_FRAME_MS = 1000 / 60;
+const RESPAWN_GRACE_MS = 600;
+const START_GRACE_MS = 4000;
 
 let gameState = 'start'; // 'start', 'playing', 'landed'
 let lastTimestamp = null;
+let respawnGraceRemainingMs = 0;
+let showLaunchCountdown = false;
 
 // Canvas setup
 canvas.width = WIDTH;
@@ -72,7 +76,7 @@ document.addEventListener('keydown', (e) => {
         player.landed = false;
         gameState = 'playing';
     }
-    if (gameState === 'playing') {
+    if (gameState === 'playing' && respawnGraceRemainingMs <= 0) {
         switch (e.key) {
             case 'ArrowUp':
                 player.thrust = true;
@@ -114,6 +118,17 @@ function update(timestamp) {
     lastTimestamp = timestamp;
 
     if (gameState === 'playing' && !player.landed) {
+        if (respawnGraceRemainingMs > 0) {
+            respawnGraceRemainingMs = Math.max(0, respawnGraceRemainingMs - deltaMs);
+            clearControlInputs();
+        }
+
+        if (respawnGraceRemainingMs > 0) {
+            draw();
+            requestAnimationFrame(update);
+            return;
+        }
+
         // --- Physics ---
         // Rotation
         if (player.rotatingLeft) {
@@ -223,16 +238,32 @@ function draw() {
         return;
     }
 
-    // Draw landscape
+    // Draw landscape (batched by segment type)
     ctx.strokeStyle = '#fff';
     ctx.beginPath();
-    ctx.moveTo(landscape[0].x, landscape[0].y);
     for (let i = 1; i < landscape.length; i++) {
-        ctx.strokeStyle = landscape[i].isLandingPad ? 'lime' : '#fff';
-        ctx.lineTo(landscape[i].x, landscape[i].y);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(landscape[i].x, landscape[i].y);
+        const p1 = landscape[i - 1];
+        const p2 = landscape[i];
+        const isLandingSegment = p1.isLandingPad && p2.isLandingPad;
+
+        if (!isLandingSegment) {
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+        }
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = 'lime';
+    ctx.beginPath();
+    for (let i = 1; i < landscape.length; i++) {
+        const p1 = landscape[i - 1];
+        const p2 = landscape[i];
+        const isLandingSegment = p1.isLandingPad && p2.isLandingPad;
+
+        if (isLandingSegment) {
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+        }
     }
     ctx.stroke();
 
@@ -268,6 +299,24 @@ function draw() {
     ctx.textAlign = 'left';
     ctx.fillText(`Fuel: ${Math.ceil(player.fuel)}`, 20, 30);
 
+    if (gameState === 'playing' && respawnGraceRemainingMs > 0) {
+        let countdownText = 'GO!';
+        if (showLaunchCountdown) {
+            if (respawnGraceRemainingMs > 3000) {
+                countdownText = '3';
+            } else if (respawnGraceRemainingMs > 2000) {
+                countdownText = '2';
+            } else if (respawnGraceRemainingMs > 1000) {
+                countdownText = '1';
+            }
+        }
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 64px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText(countdownText, WIDTH / 2, HEIGHT / 2);
+    }
+
     if(gameState === 'landed'){
         ctx.fillStyle = 'lime';
         ctx.font = '30px Courier New';
@@ -278,20 +327,29 @@ function draw() {
     }
 }
 
-function resetPlayer() {
+function clearControlInputs() {
+    player.thrust = false;
+    player.rotatingLeft = false;
+    player.rotatingRight = false;
+}
+
+function resetPlayer(applyRespawnGrace = true, graceMs = RESPAWN_GRACE_MS, withCountdown = false) {
     player.x = WIDTH / 2;
     player.y = 100;
     player.velocity = { x: 0, y: 0 };
     player.angle = 0;
     player.landed = false;
     player.fuel = INITIAL_FUEL;
+    clearControlInputs();
+    respawnGraceRemainingMs = applyRespawnGrace ? graceMs : 0;
+    showLaunchCountdown = applyRespawnGrace && withCountdown;
     gameState = 'playing';
 }
 
 function startGame() {
     startScreen.style.display = 'none';
     generateLandscape();
-    resetPlayer();
+    resetPlayer(true, START_GRACE_MS, true);
 }
 
 // Initial draw
